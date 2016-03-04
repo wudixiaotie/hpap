@@ -9,10 +9,13 @@
 %% APIs
 %% ===================================================================
 
-start_link(PoolName, PoolSize) when is_atom(PoolName) ->
-    {ok, Pid} = hpap_worker_sup:start_link(PoolName),
+-callback handle_job(Args :: term()) -> ok.
+
+start_link(PoolName, PoolSize) when is_atom(PoolName), is_integer(PoolSize) ->
+    {ok, Pid} = hpap_worker_sup:start_link(PoolName, PoolSize),
     ok = initialize_worker(PoolName, PoolSize),
     {ok, Pid}.
+
 
 cast(PoolName, Job) ->
     PoolSize = ets:lookup_element(PoolName, pool_size, 2),
@@ -21,7 +24,7 @@ cast(PoolName, Job) ->
     Key = random:uniform(PoolSize),
     case ets:lookup(PoolName, Key) of
         [{_, WorkerPid}] ->
-            ok = gen_server:cast(WorkerPid, Job),
+            ok = gen_server:cast(WorkerPid, {job, Job}),
             ok;
         _ ->
             error
@@ -35,7 +38,7 @@ cast(PoolName, Job) ->
 %% ===================================================================
 
 initialize_worker(PoolName, Index) when Index > 0 ->
-    hpap_worker_sup:start_child(PoolName, Index),
+    supervisor:start_child(PoolName, [PoolName, Index]),
     initialize_worker(PoolName, Index - 1);
 initialize_worker(_, 0) ->
     ok.

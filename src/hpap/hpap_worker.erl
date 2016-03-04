@@ -9,6 +9,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-record(state, {pool_name}).
+
 
 
 %% ===================================================================
@@ -16,7 +18,7 @@
 %% ===================================================================
 
 start_link(PoolName, Index) ->
-    gen_server:start_link(?MODULE, [], [PoolName, Index]).
+    gen_server:start_link(?MODULE, [PoolName, Index], []).
 
 
 
@@ -26,14 +28,17 @@ start_link(PoolName, Index) ->
 
 init([PoolName, Index]) ->
     ets:insert(PoolName, {Index, self()}),
-    {ok, []}.
+    {ok, #state{pool_name = PoolName}}.
+
 
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
 
-handle_cast({job, Msg}, State) ->
-    io:format("=============some real job: ~p!~n", [Msg]),
+
+handle_cast({job, Job}, #state{pool_name = PoolName} = State) ->
+    ok = PoolName:handle_job(Job),
     {noreply, State};
 handle_cast(_Msg, State) -> {noreply, State}.
+
 
 handle_info(_Info, State) -> {noreply, State}.
 terminate(_Reason, _State) -> ok.

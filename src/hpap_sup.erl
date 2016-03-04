@@ -9,10 +9,10 @@
 -export([init/1]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), #{id        => I,
-                          start     => {I, start_link, []},
-                          restart   => permanent,
-                          type      => Type}).
+-define(CHILD(Mod, Args), #{id        => Mod,
+                            start     => {Mod, start_link, Args},
+                            restart   => permanent,
+                            type      => supervisor}).
 
 %% ===================================================================
 %% API functions
@@ -26,5 +26,4 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, []} }.
-
+    {ok, { {one_for_one, 5, 10}, [?CHILD(pool_test, [])]} }.
