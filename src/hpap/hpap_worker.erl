@@ -18,7 +18,8 @@
 %% ===================================================================
 
 start_link(PoolName, Index) ->
-    gen_server:start_link(?MODULE, [PoolName, Index], []).
+    WorkerName = hpap:worker_name(PoolName, Index),
+    gen_server:start_link({local, WorkerName}, ?MODULE, [PoolName], []).
 
 
 
@@ -26,8 +27,7 @@ start_link(PoolName, Index) ->
 %% gen_server callbacks
 %% ===================================================================
 
-init([PoolName, Index]) ->
-    ets:insert(PoolName, {Index, self()}),
+init([PoolName]) ->
     {ok, #state{pool_name = PoolName}}.
 
 
