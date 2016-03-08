@@ -1,7 +1,7 @@
 -module(hpap).
 
 % APIs
--export([start_link/2, cast/2, worker_name/2]).
+-export([start_link/2, cast/2, balancer_name/1, worker_name/2]).
 
 
 
@@ -27,6 +27,11 @@ cast(PoolName, Job) ->
     ok.
 
 
+balancer_name(PoolName) ->
+    PoolNameStr = erlang:atom_to_list(PoolName),
+    erlang:list_to_atom(PoolNameStr ++ "_balancer").
+
+
 worker_name(PoolName, Index) ->
     PoolNameStr = erlang:atom_to_list(PoolName),
     IndexStr = erlang:integer_to_list(Index),
@@ -39,7 +44,14 @@ worker_name(PoolName, Index) ->
 %% ===================================================================
 
 initialize_worker(PoolName, Index) when Index > 0 ->
-    supervisor:start_child(PoolName, [PoolName, Index]),
+    WorkerName = hpap:worker_name(PoolName, Index),
+    {ok, _} = supervisor:start_child(PoolName,
+                                     #{id       => WorkerName,
+                                       start    => {hpap_worker, start_link, [PoolName, WorkerName]},
+                                       restart  => permanent,
+                                       shutdown => brutal_kill,
+                                       type     => worker,
+                                       modules  => [hpap_worker]}),
     initialize_worker(PoolName, Index - 1);
 initialize_worker(_, 0) ->
     ok.
