@@ -3,7 +3,9 @@
 -behaviour(hpap).
 
 % APIs
--export([start_link/0, cast/1, handle_job/1]).
+-export([start_link/0, create/1, handle_task/1]).
+
+-export([send_msg/2]).
 
 
 
@@ -15,10 +17,18 @@ start_link() ->
     hpap:start_link(?MODULE, 10).
 
 
-cast(Job) ->
-    hpap:cast(?MODULE, Job).
+create(Task) ->
+    hpap:create(?MODULE, Task).
 
 
-handle_job(Job) ->
-    io:format("~p=============some real job: ~p!~n", [self(), Job]),
+handle_task(Task) ->
+    io:format("~p=============some real task: ~p!~n", [self(), Task]),
+    981723 rem 233,
+    ok.
+
+
+send_msg(Pid, Times) when Times > 0 ->
+    Pid ! {task, <<"asdfaSDFAaksjdhfoaiwjef;alskdjflsdf">>},
+    send_msg(Pid, Times - 1);
+send_msg(_, 0) ->
     ok.
