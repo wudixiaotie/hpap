@@ -5,7 +5,7 @@
 % APIs
 -export([start_link/0, create/1, handle_task/1]).
 
--export([send_msg/2]).
+-export([send_msg/2, workers_info/0]).
 
 
 
@@ -23,12 +23,26 @@ create(Task) ->
 
 handle_task(Task) ->
     io:format("~p=============some real task: ~p!~n", [self(), Task]),
-    981723 rem 233,
+    timer:sleep(10000),
     ok.
 
 
 send_msg(Pid, Times) when Times > 0 ->
     Pid ! {task, <<"asdfaSDFAaksjdhfoaiwjef;alskdjflsdf">>},
+    % pool_test:create(<<"asdf">>),
     send_msg(Pid, Times - 1);
 send_msg(_, 0) ->
     ok.
+
+workers_info() ->
+    WorkerList = supervisor:which_children(?MODULE),
+    workers_info(WorkerList, []).
+
+
+workers_info([{WorkerName, Pid, worker, [hpap_worker]}|T], Result) ->
+    {_, MQL} = erlang:process_info(Pid, message_queue_len),
+    workers_info(T, [{WorkerName, MQL}|Result]);
+workers_info([_|T], Result) ->
+    workers_info(T, Result);
+workers_info([], Result) ->
+    {ok, Result}.

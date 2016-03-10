@@ -1,1 +1,0 @@
--record(options, {balance_threshold = 200, task_pack_size = 20}).

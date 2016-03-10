@@ -22,8 +22,8 @@
 %% API functions
 %% ===================================================================
 
-start_link(PoolName, Opts, PoolSize) ->
-    supervisor:start_link({local, PoolName}, ?MODULE, [PoolName, Opts, PoolSize]).
+start_link(PoolName, PoolSize, BalanceThreshold) ->
+    supervisor:start_link({local, PoolName}, ?MODULE, [PoolName, PoolSize, BalanceThreshold]).
 
 
 
@@ -31,7 +31,7 @@ start_link(PoolName, Opts, PoolSize) ->
 %% Supervisor callbacks
 %% ===================================================================
 
-init([PoolName, Opts, PoolSize]) ->
+init([PoolName, PoolSize, BalanceThreshold]) ->
     ets:new(PoolName, [named_table, public, {read_concurrency, true}]),
     ets:insert(PoolName, {pool_size, PoolSize}),
-    {ok, { {one_for_one, 5, 10}, [?CHILD([PoolName, Opts])] } }.
+    {ok, { {one_for_one, 5, 10}, [?CHILD([PoolName, BalanceThreshold])] } }.
