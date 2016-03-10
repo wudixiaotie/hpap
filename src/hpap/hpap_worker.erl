@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {pool_name, balancer_name, balance_threshold}).
+-record(state, {pool_name, balance_threshold}).
 
 
 
@@ -27,9 +27,7 @@ start_link(PoolName, BalanceThreshold, WorkerName) ->
 %% ===================================================================
 
 init([PoolName, BalanceThreshold]) ->
-    BalancerName = hpap:balancer_name(PoolName),
     State = #state{pool_name = PoolName,
-                   balancer_name = BalancerName,
                    balance_threshold = BalanceThreshold},
     {ok, State}.
 
@@ -41,10 +39,9 @@ handle_cast(_Msg, State) -> {noreply, State}.
 handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
     ok = PoolName:handle_task(Task),
     {_, MQL} = erlang:process_info(self(), message_queue_len),
-    N = MQL - State#state.balance_threshold,
-    case N > 0 of
+    case MQL > State#state.balance_threshold of
         true ->
-            ok = hpap:send_task(N, State#state.balancer_name);
+            ok = migrate_task(PoolName);
         _ ->
             ok
     end,
@@ -61,13 +58,48 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ===================================================================
 
-% migrate_path(PoolName) ->
-%     WorkerList = supervisor:which_children(PoolName),
-%     average_message_queue_len(WorkerList)
+migrate_task(PoolName) ->
+    WorkerList = supervisor:which_children(PoolName),
+    {ok, Average, MQLList} = average(WorkerList),
+    ok = do_migrate(MQLList, Average),
+    ok.
 
 
-% average_message_queue_len(WorkerList) ->
-%     average_message_queue_len(WorkerList, 0).
+average(WorkerList) ->
+    average(WorkerList, 0, 0, []).
 
 
-% average_message_queue_len([{_WorkerName, Pid, worker, [hpap_worker]}|T], BalanceThreshold) ->
+average([{_, Pid, _, _}|T], Sum, Count, MQLList) ->
+    {_, MQL} = erlang:process_info(Pid, message_queue_len),
+    average(T, Sum + MQL, Count + 1, [{Pid, MQL}|MQLList]);
+average([], Sum, Count, MQLList) ->
+    Average = erlang:trunc(Sum / Count) + 1,
+    {ok, Average, MQLList}.
+
+
+do_migrate([{Pid, MQL}|T], Average) ->
+    N = Average - MQL,
+    case N > 0 of
+        true ->
+            ok = send_task(N, Pid);
+        _ ->
+            ok
+    end,
+    do_migrate(T, Average);
+do_migrate([], _) ->
+    ok.
+
+
+send_task(N, Pid) when N > 0 ->
+    receive
+        {task, Task} ->
+            Pid ! {task, Task},
+            send_task(N - 1, Pid);
+        _ ->
+            send_task(N, Pid)
+    after
+        0 ->
+            send_task(0, Pid)
+    end;
+send_task(0, _) ->
+    ok.
