@@ -7,7 +7,7 @@
 
 -export([send_msg/2, workers_info/0]).
 
-
+-compile (export_all).
 
 %% ===================================================================
 %% APIs
@@ -23,7 +23,7 @@ create(Task) ->
 
 handle_task(Task) ->
     io:format("~p=============some real task: ~p!~n", [self(), Task]),
-    timer:sleep(10000),
+    timer:sleep(100),
     ok.
 
 
@@ -46,3 +46,8 @@ workers_info([_|T], Result) ->
     workers_info(T, Result);
 workers_info([], Result) ->
     {ok, Result}.
+
+
+test() ->
+    pool_test:send_msg(pool_test_1, 598),
+    pool_test:workers_info().
