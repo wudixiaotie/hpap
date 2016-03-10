@@ -5,8 +5,6 @@
 % APIs
 -export([start_link/0, create/1, handle_task/1]).
 
--export([send_msg/2, workers_info/0]).
-
 -compile (export_all).
 
 %% ===================================================================
@@ -26,6 +24,10 @@ handle_task(Task) ->
     timer:sleep(100),
     ok.
 
+
+%% ===================================================================
+%% Tests
+%% ===================================================================
 
 send_msg(Pid, Times) when Times > 0 ->
     Pid ! {task, <<"asdfaSDFAaksjdhfoaiwjef;alskdjflsdf">>},
