@@ -16,13 +16,13 @@
 
 start_link(PoolName, PoolSize) when is_atom(PoolName), is_integer(PoolSize) ->
     {ok, Pid} = hpap_worker_sup:start_link(PoolName, PoolSize, ?BALANCE_THRESHLOD),
-    ok = initialize_worker(PoolName, PoolSize, ?BALANCE_THRESHLOD),
+    ok = initialize_worker(PoolName, PoolSize),
     {ok, Pid}.
 
 
 start_link(PoolName, PoolSize, BalanceThreshold) when is_atom(PoolName), is_integer(PoolSize) ->
     {ok, Pid} = hpap_worker_sup:start_link(PoolName, PoolSize, BalanceThreshold),
-    ok = initialize_worker(PoolName, PoolSize, BalanceThreshold),
+    ok = initialize_worker(PoolName, PoolSize),
     {ok, Pid}.
 
 
@@ -67,15 +67,9 @@ send_task(0, _) ->
 %% Internal functions
 %% ===================================================================
 
-initialize_worker(PoolName, Index, BalanceThreshold) when Index > 0 ->
+initialize_worker(PoolName, Index) when Index > 0 ->
     WorkerName = hpap:worker_name(PoolName, Index),
-    {ok, _} = supervisor:start_child(PoolName,
-                                     #{id       => WorkerName,
-                                       start    => {hpap_worker, start_link, [PoolName, WorkerName, BalanceThreshold]},
-                                       restart  => permanent,
-                                       shutdown => brutal_kill,
-                                       type     => worker,
-                                       modules  => [hpap_worker]}),
-    initialize_worker(PoolName, Index - 1, BalanceThreshold);
-initialize_worker(_, 0, _) ->
+    {ok, _} = supervisor:start_child(PoolName, [WorkerName]),
+    initialize_worker(PoolName, Index - 1);
+initialize_worker(_, 0) ->
     ok.

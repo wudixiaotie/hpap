@@ -17,7 +17,7 @@
 %% APIs
 %% ===================================================================
 
-start_link(PoolName, WorkerName, BalanceThreshold) ->
+start_link(PoolName, BalanceThreshold, WorkerName) ->
     gen_server:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold], []).
 
 
@@ -61,5 +61,13 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ===================================================================
 
-migrate_path(PoolName) ->
-    WorkerList = supervisor:which_children(PoolName),
+% migrate_path(PoolName) ->
+%     WorkerList = supervisor:which_children(PoolName),
+%     average_message_queue_len(WorkerList)
+
+
+% average_message_queue_len(WorkerList) ->
+%     average_message_queue_len(WorkerList, 0).
+
+
+% average_message_queue_len([{_WorkerName, Pid, worker, [hpap_worker]}|T], BalanceThreshold) ->

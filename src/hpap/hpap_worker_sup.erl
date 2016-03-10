@@ -9,12 +9,12 @@
 -export([init/1]).
 
 %% Helper macro for declaring children of supervisor
--define(CHILD(Args), #{id => hpap_balancer,
-                       start => {hpap_balancer, start_link, Args},
-                       restart => permanent,
+-define(CHILD(Args), #{id       => hpap_worker,
+                       start    => {hpap_worker, start_link, Args},
+                       restart  => permanent,
                        shutdown => brutal_kill,
-                       type => worker,
-                       modules => [hpap_balancer]}).
+                       type     => worker,
+                       modules  => [hpap_worker]}).
 
 
 
@@ -34,4 +34,4 @@ start_link(PoolName, PoolSize, BalanceThreshold) ->
 init([PoolName, PoolSize, BalanceThreshold]) ->
     ets:new(PoolName, [named_table, public, {read_concurrency, true}]),
     ets:insert(PoolName, {pool_size, PoolSize}),
-    {ok, { {one_for_one, 5, 10}, [?CHILD([PoolName, BalanceThreshold])] } }.
+    {ok, { {simple_one_for_one, 5, 10}, [?CHILD([PoolName, BalanceThreshold])] } }.
