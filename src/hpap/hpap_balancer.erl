@@ -52,9 +52,6 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ===================================================================
 
-migrate_path(PoolName) ->
-    WorkerList = supervisor:which_children(PoolName),
-
 migrate(PoolName, BalanceThreshold) ->
     WorkerList = supervisor:which_children(PoolName),
     do_migrate(WorkerList, BalanceThreshold).
