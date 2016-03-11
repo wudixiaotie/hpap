@@ -38,13 +38,7 @@ handle_cast(_Msg, State) -> {noreply, State}.
 
 handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
     ok = PoolName:handle_task(Task),
-    {_, MQL} = erlang:process_info(self(), message_queue_len),
-    case MQL > State#state.balance_threshold of
-        true ->
-            ok = migrate_task(PoolName);
-        _ ->
-            ok
-    end,
+    ok = migrate_task(PoolName, State#state.balance_threshold),
     {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
@@ -58,23 +52,41 @@ code_change(_OldVer, State, _Extra) -> {ok, State}.
 %% Internal functions
 %% ===================================================================
 
-migrate_task(PoolName) ->
-    WorkerList = supervisor:which_children(PoolName),
-    {ok, Average, MQLList} = average(WorkerList),
-    ok = do_migrate(MQLList, Average),
-    ok.
+migrate_task(PoolName, BalanceThreshold) ->
+    {_, MQL} = erlang:process_info(self(), message_queue_len),
+    case MQL > BalanceThreshold of
+        true ->
+            WorkerList = supervisor:which_children(PoolName),
+            {ok, Average, MQLList} = average(WorkerList, BalanceThreshold, PoolName),
+            ok = do_migrate(MQLList, Average);
+        _ ->
+            ok
+    end.
 
 
-average(WorkerList) ->
-    average(WorkerList, 0, 0, []).
+average(WorkerList, BalanceThreshold, PoolName) ->
+    average(WorkerList, BalanceThreshold, PoolName, 0, 0, []).
 
 
-average([{_, Pid, _, _}|T], Sum, Count, MQLList) ->
+average([{_, Pid, _, _}|T], BalanceThreshold, PoolName, Sum, Count, MQLList) ->
     {_, MQL} = erlang:process_info(Pid, message_queue_len),
-    average(T, Sum + MQL, Count + 1, [{Pid, MQL}|MQLList]);
-average([], Sum, Count, MQLList) ->
-    Average = erlang:trunc(Sum / Count) + 1,
-    {ok, Average, MQLList}.
+    average(T, BalanceThreshold, PoolName, Sum + MQL, Count + 1, [{Pid, MQL}|MQLList]);
+average([], BalanceThreshold, PoolName, Sum, Count, MQLList) ->
+    MinimunCount = erlang:trunc(Sum / BalanceThreshold) + 1,
+    {ok, WorkerCount, WorkerMQLList} = add_new_worker(PoolName, MinimunCount, Count, MQLList),
+    Average = erlang:trunc(Sum / WorkerCount) + 1,
+    {ok, Average, WorkerMQLList}.
+
+
+add_new_worker(_, WorkerCount, WorkerCount, WorkerMQLList) ->
+    {ok, WorkerCount, WorkerMQLList};
+add_new_worker(PoolName, MinimunCount, Count, MQLList) ->
+    PoolSize = ets:lookup_element(PoolName, pool_size, 2),
+    NewPoolSize = PoolSize + 1,
+    WorkerName = hpap:worker_name(PoolName, NewPoolSize),
+    {ok, WorkerPid} = supervisor:start_child(PoolName, [WorkerName]),
+    ets:insert(PoolName, {pool_size, NewPoolSize}),
+    add_new_worker(PoolName, MinimunCount, Count + 1, [{WorkerPid, 0}|MQLList]).
 
 
 do_migrate([{Pid, MQL}|T], Average) ->

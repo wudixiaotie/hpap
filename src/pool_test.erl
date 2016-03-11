@@ -53,3 +53,5 @@ workers_info([], Result) ->
 test() ->
     pool_test:send_msg(pool_test_1, 598),
     pool_test:workers_info().
+
+
