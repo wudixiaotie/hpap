@@ -14,15 +14,11 @@
 -callback handle_task(Args :: term()) -> ok.
 
 start_link(PoolName, PoolSize) when is_atom(PoolName), is_integer(PoolSize) ->
-    {ok, Pid} = hpap_worker_sup:start_link(PoolName, PoolSize, ?BALANCE_THRESHLOD),
-    ok = initialize_worker(PoolName, PoolSize),
-    {ok, Pid}.
+    hpap_initialize(PoolName, PoolSize, ?BALANCE_THRESHLOD).
 
 
 start_link(PoolName, PoolSize, BalanceThreshold) when is_atom(PoolName), is_integer(PoolSize) ->
-    {ok, Pid} = hpap_worker_sup:start_link(PoolName, PoolSize, BalanceThreshold),
-    ok = initialize_worker(PoolName, PoolSize),
-    {ok, Pid}.
+    hpap_initialize(PoolName, PoolSize, BalanceThreshold).
 
 
 create(PoolName, Task) ->
@@ -46,9 +42,16 @@ worker_name(PoolName, Index) ->
 %% Internal functions
 %% ===================================================================
 
-initialize_worker(PoolName, Index) when Index > 0 ->
+hpap_initialize(PoolName, PoolSize, BalanceThreshold) ->
+    {ok, Pid} = hpap_sup:start_link(PoolName, PoolSize, BalanceThreshold),
+    WorkerSupPid = ets:lookup_element(PoolName, worker_sup_pid, 2),
+    ok = initialize_worker(PoolName, WorkerSupPid, PoolSize),
+    {ok, Pid}.
+
+
+initialize_worker(PoolName, WorkerSupPid, Index) when Index > 0 ->
     WorkerName = hpap:worker_name(PoolName, Index),
-    {ok, _} = supervisor:start_child(PoolName, [WorkerName]),
-    initialize_worker(PoolName, Index - 1);
-initialize_worker(_, 0) ->
+    {ok, _} = supervisor:start_child(WorkerSupPid, [WorkerName]),
+    initialize_worker(PoolName, WorkerSupPid, Index - 1);
+initialize_worker(_, _, 0) ->
     ok.

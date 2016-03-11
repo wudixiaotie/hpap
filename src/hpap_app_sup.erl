@@ -1,4 +1,4 @@
--module(hpap_sup).
+-module(hpap_app_sup).
 
 -behaviour(supervisor).
 

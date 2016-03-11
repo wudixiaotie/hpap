@@ -23,7 +23,7 @@
 %% ===================================================================
 
 start_link(PoolName, PoolSize, BalanceThreshold) ->
-    supervisor:start_link({local, PoolName}, ?MODULE, [PoolName, PoolSize, BalanceThreshold]).
+    supervisor:start_link(?MODULE, [PoolName, PoolSize, BalanceThreshold]).
 
 
 
@@ -34,4 +34,5 @@ start_link(PoolName, PoolSize, BalanceThreshold) ->
 init([PoolName, PoolSize, BalanceThreshold]) ->
     ets:new(PoolName, [named_table, public, {read_concurrency, true}]),
     ets:insert(PoolName, {pool_size, PoolSize}),
+    ets:insert(PoolName, {worker_sup_pid, self()}),
     {ok, { {simple_one_for_one, 5, 10}, [?CHILD([PoolName, BalanceThreshold])] } }.

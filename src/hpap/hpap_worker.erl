@@ -57,61 +57,34 @@ migrate_task(PoolName, BalanceThreshold) ->
     case MQL > BalanceThreshold of
         true ->
             WorkerList = supervisor:which_children(PoolName),
-            {ok, Average, MQLList} = average(WorkerList, BalanceThreshold, PoolName),
-            ok = do_migrate(MQLList, Average);
+            {ok, MQLList, Average, NewWorkerCount} = average(WorkerList, BalanceThreshold, PoolName),
+            ok = send_migration_plan(PoolName, MQLList, Average, NewWorkerCount);
         _ ->
             ok
     end.
 
 
 average(WorkerList, BalanceThreshold, PoolName) ->
-    average(WorkerList, BalanceThreshold, PoolName, 0, 0, []).
+    average(WorkerList, BalanceThreshold, PoolName, 0, []).
 
 
-average([{_, Pid, _, _}|T], BalanceThreshold, PoolName, Sum, Count, MQLList) ->
+average([{_, Pid, _, _}|T], BalanceThreshold, PoolName, Sum, MQLList) ->
     {_, MQL} = erlang:process_info(Pid, message_queue_len),
-    average(T, BalanceThreshold, PoolName, Sum + MQL, Count + 1, [{Pid, MQL}|MQLList]);
-average([], BalanceThreshold, PoolName, Sum, Count, MQLList) ->
-    MinimunCount = erlang:trunc(Sum / BalanceThreshold) + 1,
-    {ok, WorkerCount, WorkerMQLList} = add_new_worker(PoolName, MinimunCount, Count, MQLList),
-    Average = erlang:trunc(Sum / WorkerCount) + 1,
-    {ok, Average, WorkerMQLList}.
-
-
-add_new_worker(_, WorkerCount, WorkerCount, WorkerMQLList) ->
-    {ok, WorkerCount, WorkerMQLList};
-add_new_worker(PoolName, MinimunCount, Count, MQLList) ->
-    PoolSize = ets:lookup_element(PoolName, pool_size, 2),
-    NewPoolSize = PoolSize + 1,
-    WorkerName = hpap:worker_name(PoolName, NewPoolSize),
-    {ok, WorkerPid} = supervisor:start_child(PoolName, [WorkerName]),
-    ets:insert(PoolName, {pool_size, NewPoolSize}),
-    add_new_worker(PoolName, MinimunCount, Count + 1, [{WorkerPid, 0}|MQLList]).
-
-
-do_migrate([{Pid, MQL}|T], Average) ->
-    N = Average - MQL,
-    case N > 0 of
+    average(T, BalanceThreshold, PoolName, Sum + MQL, [{Pid, MQL}|MQLList]);
+average([], BalanceThreshold, PoolName, Sum, MQLList) ->
+    CurrentWorkerCount = erlang:length(MQLList),
+    MinimunWorkerCount = erlang:trunc(Sum / BalanceThreshold) + 1,
+    NewWorkerCount = case MinimunWorkerCount > CurrentWorkerCount of
         true ->
-            ok = send_task(N, Pid);
+            MinimunWorkerCount - CurrentWorkerCount;
         _ ->
-            ok
+            0
     end,
-    do_migrate(T, Average);
-do_migrate([], _) ->
-    ok.
+    Average = erlang:trunc(Sum / (CurrentWorkerCount + NewWorkerCount)) + 1,
+    {ok, MQLList, Average, NewWorkerCount}.
 
 
-send_task(N, Pid) when N > 0 ->
-    receive
-        {task, Task} ->
-            Pid ! {task, Task},
-            send_task(N - 1, Pid);
-        _ ->
-            send_task(N, Pid)
-    after
-        0 ->
-            send_task(0, Pid)
-    end;
-send_task(0, _) ->
+send_migration_plan(PoolName, MQLList, Average, NewWorkerCount) ->
+    MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
+    MigrationControlCenterPid ! {plan, PoolName, MQLList, Average, NewWorkerCount},
     ok.

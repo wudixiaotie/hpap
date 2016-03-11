@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    hpap_sup:start_link().
+    hpap_app_sup:start_link().
 
 
 stop(_State) ->
