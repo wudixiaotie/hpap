@@ -56,35 +56,30 @@ migrate_task(PoolName, BalanceThreshold) ->
     {_, MQL} = erlang:process_info(self(), message_queue_len),
     case MQL > BalanceThreshold of
         true ->
-            WorkerList = supervisor:which_children(PoolName),
-            {ok, MQLList, Average, NewWorkerCount} = average(WorkerList, BalanceThreshold, PoolName),
-            ok = send_migration_plan(PoolName, MQLList, Average, NewWorkerCount);
+            WorkerSupPid = ets:lookup_element(PoolName, worker_sup_pid, 2),
+            WorkerList = supervisor:which_children(WorkerSupPid),
+            {ok, Average} = average(WorkerList, BalanceThreshold),
+
+            MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
+            ok = hpap:send_task(MQL - Average, MigrationControlCenterPid);
         _ ->
             ok
     end.
 
 
-average(WorkerList, BalanceThreshold, PoolName) ->
-    average(WorkerList, BalanceThreshold, PoolName, 0, []).
+average(WorkerList, BalanceThreshold) ->
+    average(WorkerList, BalanceThreshold, 0, 0).
 
 
-average([{_, Pid, _, _}|T], BalanceThreshold, PoolName, Sum, MQLList) ->
+average([{_, Pid, _, _}|T], BalanceThreshold, Sum, CurrentWorkerCount) ->
     {_, MQL} = erlang:process_info(Pid, message_queue_len),
-    average(T, BalanceThreshold, PoolName, Sum + MQL, [{Pid, MQL}|MQLList]);
-average([], BalanceThreshold, PoolName, Sum, MQLList) ->
-    CurrentWorkerCount = erlang:length(MQLList),
+    average(T, BalanceThreshold, Sum + MQL, CurrentWorkerCount + 1);
+average([], BalanceThreshold, Sum, CurrentWorkerCount) ->
     MinimunWorkerCount = erlang:trunc(Sum / BalanceThreshold) + 1,
-    NewWorkerCount = case MinimunWorkerCount > CurrentWorkerCount of
+    Average = case MinimunWorkerCount > CurrentWorkerCount of
         true ->
-            MinimunWorkerCount - CurrentWorkerCount;
+            erlang:trunc(Sum / MinimunWorkerCount) + 1;
         _ ->
-            0
+            erlang:trunc(Sum / CurrentWorkerCount) + 1
     end,
-    Average = erlang:trunc(Sum / (CurrentWorkerCount + NewWorkerCount)) + 1,
-    {ok, MQLList, Average, NewWorkerCount}.
-
-
-send_migration_plan(PoolName, MQLList, Average, NewWorkerCount) ->
-    MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
-    MigrationControlCenterPid ! {plan, PoolName, MQLList, Average, NewWorkerCount},
-    ok.
+    {ok, Average}.

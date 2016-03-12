@@ -32,8 +32,13 @@ start_link(PoolName, PoolSize, BalanceThreshold) ->
 %% ===================================================================
 
 init([PoolName, PoolSize, BalanceThreshold]) ->
+    ets:new(PoolName, [named_table, public, {read_concurrency, true}]),
+    ets:insert(PoolName, {pool_size, PoolSize}),
+
     {ok, { {one_for_one, 5, 10},
-           [?CHILD(hpap_migration_control_center, [], worker),
+           [?CHILD(hpap_migration_control_center,
+                   [PoolName, BalanceThreshold],
+                   worker),
             ?CHILD(hpap_worker_sup,
-                   [PoolName, PoolSize, BalanceThreshold],
+                   [PoolName, BalanceThreshold],
                    supervisor)]} }.

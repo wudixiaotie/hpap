@@ -37,7 +37,9 @@ send_msg(_, 0) ->
     ok.
 
 workers_info() ->
-    WorkerList = supervisor:which_children(?MODULE),
+    ChildrenList = supervisor:which_children(?MODULE),
+    {hpap_worker_sup, Pid, _, _} = lists:keyfind(hpap_worker_sup, 1, ChildrenList),
+    WorkerList = supervisor:which_children(Pid),
     workers_info(WorkerList, []).
 
 

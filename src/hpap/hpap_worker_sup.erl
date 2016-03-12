@@ -3,7 +3,7 @@
 -behaviour(supervisor).
 
 % APIs
--export([start_link/3]).
+-export([start_link/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -22,8 +22,8 @@
 %% API functions
 %% ===================================================================
 
-start_link(PoolName, PoolSize, BalanceThreshold) ->
-    supervisor:start_link(?MODULE, [PoolName, PoolSize, BalanceThreshold]).
+start_link(PoolName, BalanceThreshold) ->
+    supervisor:start_link(?MODULE, [PoolName, BalanceThreshold]).
 
 
 
@@ -31,8 +31,6 @@ start_link(PoolName, PoolSize, BalanceThreshold) ->
 %% Supervisor callbacks
 %% ===================================================================
 
-init([PoolName, PoolSize, BalanceThreshold]) ->
-    ets:new(PoolName, [named_table, public, {read_concurrency, true}]),
-    ets:insert(PoolName, {pool_size, PoolSize}),
+init([PoolName, BalanceThreshold]) ->
     ets:insert(PoolName, {worker_sup_pid, self()}),
     {ok, { {simple_one_for_one, 5, 10}, [?CHILD([PoolName, BalanceThreshold])] } }.
