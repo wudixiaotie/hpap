@@ -11,6 +11,8 @@
 
 -record(state, {pool_name, balance_threshold}).
 
+-define(TIMEOUT, 600000).
+
 
 
 %% ===================================================================
@@ -47,7 +49,10 @@ handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
 
     NewWorkerList = supervisor:which_children(WorkerSupPid),
     ok = do_migrate(NewWorkerList, Average),
-    {noreply, State};
+    {noreply, State, ?TIMEOUT};
+handle_info(timeout, State) ->
+    io:format("=============reduce number of the workers~n"),
+    {noreply, State, ?TIMEOUT};
 handle_info(_Info, State) -> {noreply, State}.
 
 
