@@ -40,6 +40,11 @@ handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
     ok = PoolName:handle_task(Task),
     ok = migrate_task(PoolName, State#state.balance_threshold),
     {noreply, State};
+handle_info(done, #state{pool_name = PoolName} = State) ->
+    MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
+    % tell hpap_migration_controll_center this worker can be terminated
+    MigrationControlCenterPid ! {done, self()},
+    {noreply, State};
 handle_info(_Info, State) -> {noreply, State}.
 
 

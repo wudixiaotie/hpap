@@ -29,8 +29,10 @@ start_link(PoolName, BalanceThreshold) ->
 %% ===================================================================
 
 init([PoolName, BalanceThreshold]) ->
+    erlang:process_flag(trap_exit, true),
     ets:insert(PoolName, {migration_control_center_pid, self()}),
-    {ok, #state{pool_name = PoolName, balance_threshold = BalanceThreshold}}.
+    State = #state{pool_name = PoolName, balance_threshold = BalanceThreshold},
+    {ok, State, ?TIMEOUT}.
 
 
 handle_call(_Request, _From, State) -> {reply, nomatch, State}.
@@ -50,13 +52,32 @@ handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
     NewWorkerList = supervisor:which_children(WorkerSupPid),
     ok = do_migrate(NewWorkerList, Average),
     {noreply, State, ?TIMEOUT};
-handle_info(timeout, State) ->
-    io:format("=============reduce number of the workers~n"),
+handle_info(timeout, #state{pool_name = PoolName} = State) ->
+    PoolSize = ets:lookup_element(PoolName, pool_size, 2),
+    case PoolSize > 2 of
+        true ->
+            ets:insert(PoolName, {pool_size, PoolSize - 1}),
+            WorkerName = hpap:worker_name(PoolName, PoolSize),
+            % tell worker to clean up remaining messages
+            WorkerName ! done;
+        _ ->
+            ok
+    end,
     {noreply, State, ?TIMEOUT};
-handle_info(_Info, State) -> {noreply, State}.
+handle_info({done, WorkerPid}, #state{pool_name = PoolName} = State) ->
+    WorkerSupPid = ets:lookup_element(PoolName, worker_sup_pid, 2),
+    % terminate the worker
+    ok = supervisor:terminate_child(WorkerSupPid, WorkerPid),
+    {noreply, State, ?TIMEOUT};
+handle_info(_Info, State) -> {noreply, State, ?TIMEOUT}.
 
 
-terminate(_Reason, _State) -> ok.
+terminate(normal, _State) -> ok;
+terminate(shutdown, _State) -> ok;
+terminate({shutdown, _Reason}, _State) -> ok;
+terminate(_Reason, _State) ->
+    % hack: save msg queue to ets
+    ok.
 code_change(_OldVer, State, _Extra) -> {ok, State}.
 
 
