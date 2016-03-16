@@ -29,8 +29,12 @@ start_link(PoolName, BalanceThreshold) ->
 %% ===================================================================
 
 init([PoolName, BalanceThreshold]) ->
-    erlang:process_flag(trap_exit, true),
     ets:insert(PoolName, {migration_control_center_pid, self()}),
+
+    % pull messages from warehouse
+    WarehousePid = ets:lookup_element(PoolName, warehouse_pid, 2),
+    WarehousePid ! {pull, 0, self()},
+
     State = #state{pool_name = PoolName, balance_threshold = BalanceThreshold},
     {ok, State, ?TIMEOUT}.
 
@@ -57,8 +61,9 @@ handle_info(timeout, #state{pool_name = PoolName} = State) ->
     case PoolSize > 2 of
         true ->
             ets:insert(PoolName, {pool_size, PoolSize - 1}),
-            WorkerName = hpap:worker_name(PoolName, PoolSize),
-            % tell worker to clean up remaining messages
+            WorkerName = hpap_utility:worker_name(PoolName, PoolSize),
+            % unregister worker name and tell worker to clean up remaining messages
+            erlang:unregister(WorkerName),
             WorkerName ! done;
         _ ->
             ok
@@ -75,9 +80,13 @@ handle_info(_Info, State) -> {noreply, State, ?TIMEOUT}.
 terminate(normal, _State) -> ok;
 terminate(shutdown, _State) -> ok;
 terminate({shutdown, _Reason}, _State) -> ok;
-terminate(_Reason, _State) ->
-    % hack: save msg queue to ets
+terminate(_Reason, State) ->
+    % send msg to warehouse
+    WarehousePid = ets:lookup_element(State#state.pool_name, warehouse_pid, 2),
+    ok = hpap_utility:save_messages(WarehousePid, 0),
     ok.
+
+
 code_change(_OldVer, State, _Extra) -> {ok, State}.
 
 
@@ -114,7 +123,7 @@ add_new_worker(NewWorkerCount, PoolName) when NewWorkerCount > 0 ->
 
     PoolSize = ets:lookup_element(PoolName, pool_size, 2),
     NewPoolSize = PoolSize + 1,
-    WorkerName = hpap:worker_name(PoolName, NewPoolSize),
+    WorkerName = hpap_utility:worker_name(PoolName, NewPoolSize),
 
     {ok, _} = supervisor:start_child(WorkerSupPid, [WorkerName]),
     ets:insert(PoolName, {pool_size, NewPoolSize}),
@@ -128,7 +137,7 @@ do_migrate([{_, Pid, _, _}|T], Average) ->
     N = Average - MQL,
     case N > 0 of
         true ->
-            ok = hpap:send_task(N, Pid);
+            ok = hpap_utility:send_task(N, Pid);
         _ ->
             ok
     end,

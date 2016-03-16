@@ -39,6 +39,9 @@ init([PoolName, PoolSize, BalanceThreshold]) ->
            [?CHILD(hpap_migration_control_center,
                    [PoolName, BalanceThreshold],
                    worker),
+            ?CHILD(hpap_warehouse,
+                   [PoolName],
+                   worker),
             ?CHILD(hpap_worker_sup,
                    [PoolName, BalanceThreshold],
                    supervisor)]} }.

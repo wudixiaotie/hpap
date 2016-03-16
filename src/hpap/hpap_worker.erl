@@ -9,7 +9,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {pool_name, balance_threshold}).
+-record(state, {pool_name, balance_threshold, index}).
 
 
 
@@ -17,8 +17,9 @@
 %% APIs
 %% ===================================================================
 
-start_link(PoolName, BalanceThreshold, WorkerName) ->
-    gen_server:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold], []).
+start_link(PoolName, BalanceThreshold, Index) ->
+    WorkerName = hpap_utility:worker_name(PoolName, Index),
+    gen_server:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold, Index], []).
 
 
 
@@ -26,9 +27,14 @@ start_link(PoolName, BalanceThreshold, WorkerName) ->
 %% gen_server callbacks
 %% ===================================================================
 
-init([PoolName, BalanceThreshold]) ->
+init([PoolName, BalanceThreshold, Index]) ->
+    % pull messages from warehouse
+    WarehousePid = ets:lookup_element(PoolName, warehouse_pid, 2),
+    WarehousePid ! {pull, Index, self()},
+
     State = #state{pool_name = PoolName,
-                   balance_threshold = BalanceThreshold},
+                   balance_threshold = BalanceThreshold,
+                   index = Index},
     {ok, State}.
 
 
@@ -40,15 +46,26 @@ handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
     ok = PoolName:handle_task(Task),
     ok = migrate_task(PoolName, State#state.balance_threshold),
     {noreply, State};
-handle_info(done, #state{pool_name = PoolName} = State) ->
-    MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
+handle_info(done, State) ->
+    MigrationControlCenterPid =
+        ets:lookup_element(State#state.pool_name, migration_control_center_pid, 2),
+
     % tell hpap_migration_controll_center this worker can be terminated
     MigrationControlCenterPid ! {done, self()},
     {noreply, State};
-handle_info(_Info, State) -> {noreply, State}.
+handle_info(_Info, State) -> 1=2,{noreply, State}.
 
 
-terminate(_Reason, _State) -> ok.
+terminate(normal, _State) -> ok;
+terminate(shutdown, _State) -> ok;
+terminate({shutdown, _Reason}, _State) -> ok;
+terminate(_Reason, State) ->
+    % send msg to warehouse
+    WarehousePid = ets:lookup_element(State#state.pool_name, warehouse_pid, 2),
+    ok = hpap_utility:save_messages(WarehousePid, State#state.index),
+    ok.
+
+
 code_change(_OldVer, State, _Extra) -> {ok, State}.
 
 
@@ -66,7 +83,7 @@ migrate_task(PoolName, BalanceThreshold) ->
             {ok, Average} = average(WorkerList, BalanceThreshold),
 
             MigrationControlCenterPid = ets:lookup_element(PoolName, migration_control_center_pid, 2),
-            ok = hpap:send_task(MQL - Average, MigrationControlCenterPid);
+            ok = hpap_utility:send_task(MQL - Average, MigrationControlCenterPid);
         _ ->
             ok
     end.
