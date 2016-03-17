@@ -53,7 +53,7 @@ handle_info(done, State) ->
     % tell hpap_migration_controll_center this worker can be terminated
     MigrationControlCenterPid ! {done, self()},
     {noreply, State};
-handle_info(_Info, State) -> 1=2,{noreply, State}.
+handle_info(_Info, State) -> {noreply, State}.
 
 
 terminate(normal, _State) -> ok;
