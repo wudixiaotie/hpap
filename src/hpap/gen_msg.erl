@@ -87,6 +87,9 @@ loop(Parent, Debug, State, Module, Timeout) ->
                 {'EXIT', Reason} ->
                     terminate(Reason, Module, State)
             end
+    after
+        Timeout ->
+            Module:handle_msg(timeout, State)
     end.
 
 

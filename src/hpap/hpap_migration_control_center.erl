@@ -1,13 +1,12 @@
 -module(hpap_migration_control_center).
 
--behaviour(gen_server).
+-behaviour(gen_msg).
 
 % APIs
 -export([start_link/2]).
 
 % gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+-export([init/1, handle_msg/2, terminate/2]).
 
 -record(state, {pool_name, balance_threshold}).
 
@@ -20,7 +19,7 @@
 %% ===================================================================
 
 start_link(PoolName, BalanceThreshold) ->
-    gen_server:start_link(?MODULE, [PoolName, BalanceThreshold], []).
+    gen_msg:start_link(?MODULE, [PoolName, BalanceThreshold]).
 
 
 
@@ -39,11 +38,7 @@ init([PoolName, BalanceThreshold]) ->
     {ok, State, ?TIMEOUT}.
 
 
-handle_call(_Request, _From, State) -> {reply, nomatch, State}.
-handle_cast(_Msg, State) -> {noreply, State}.
-
-
-handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
+handle_msg({task, Task}, #state{pool_name = PoolName} = State) ->
     self() ! {task, Task},
 
     WorkerSupPid = ets:lookup_element(PoolName, worker_sup_pid, 2),
@@ -55,26 +50,26 @@ handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
 
     NewWorkerList = supervisor:which_children(WorkerSupPid),
     ok = do_migrate(NewWorkerList, Average),
-    {noreply, State, ?TIMEOUT};
-handle_info(timeout, #state{pool_name = PoolName} = State) ->
+    {ok, State, ?TIMEOUT};
+handle_msg(timeout, #state{pool_name = PoolName} = State) ->
     PoolSize = ets:lookup_element(PoolName, pool_size, 2),
     case PoolSize > 2 of
         true ->
             ets:insert(PoolName, {pool_size, PoolSize - 1}),
             WorkerName = hpap_utility:worker_name(PoolName, PoolSize),
             % unregister worker name and tell worker to clean up remaining messages
-            erlang:unregister(WorkerName),
-            WorkerName ! done;
+            WorkerName ! done,
+            erlang:unregister(WorkerName);
         _ ->
             ok
     end,
-    {noreply, State, ?TIMEOUT};
-handle_info({done, WorkerPid}, #state{pool_name = PoolName} = State) ->
+    {ok, State, ?TIMEOUT};
+handle_msg({done, WorkerPid}, #state{pool_name = PoolName} = State) ->
     WorkerSupPid = ets:lookup_element(PoolName, worker_sup_pid, 2),
     % terminate the worker
     ok = supervisor:terminate_child(WorkerSupPid, WorkerPid),
-    {noreply, State, ?TIMEOUT};
-handle_info(_Info, State) -> {noreply, State, ?TIMEOUT}.
+    {ok, State, ?TIMEOUT};
+handle_msg(_Info, State) -> {ok, State, ?TIMEOUT}.
 
 
 terminate(normal, _State) -> ok;
@@ -85,9 +80,6 @@ terminate(_Reason, State) ->
     WarehousePid = ets:lookup_element(State#state.pool_name, warehouse_pid, 2),
     ok = hpap_utility:save_messages(WarehousePid, 0),
     ok.
-
-
-code_change(_OldVer, State, _Extra) -> {ok, State}.
 
 
 
