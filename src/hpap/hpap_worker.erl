@@ -1,13 +1,12 @@
 -module(hpap_worker).
 
--behaviour(gen_server).
+-behaviour(gen_msg).
 
 % APIs
 -export([start_link/3]).
 
-% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
+% gen_msg callbacks
+-export([init/1, handle_msg/2, terminate/2]).
 
 -record(state, {pool_name, balance_threshold, index}).
 
@@ -19,12 +18,12 @@
 
 start_link(PoolName, BalanceThreshold, Index) ->
     WorkerName = hpap_utility:worker_name(PoolName, Index),
-    gen_server:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold, Index], []).
+    gen_msg:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold, Index]).
 
 
 
 %% ===================================================================
-%% gen_server callbacks
+%% gen_msg callbacks
 %% ===================================================================
 
 init([PoolName, BalanceThreshold, Index]) ->
@@ -38,22 +37,18 @@ init([PoolName, BalanceThreshold, Index]) ->
     {ok, State}.
 
 
-handle_call(_Request, _From, State) -> {reply, nomatch, State}.
-handle_cast(_Msg, State) -> {noreply, State}.
-
-
-handle_info({task, Task}, #state{pool_name = PoolName} = State) ->
+handle_msg({task, Task}, #state{pool_name = PoolName} = State) ->
     ok = PoolName:handle_task(Task),
     ok = migrate_task(PoolName, State#state.balance_threshold),
-    {noreply, State};
-handle_info(done, State) ->
+    {ok, State};
+handle_msg(done, State) ->
     MigrationControlCenterPid =
         ets:lookup_element(State#state.pool_name, migration_control_center_pid, 2),
 
     % tell hpap_migration_controll_center this worker can be terminated
     MigrationControlCenterPid ! {done, self()},
-    {noreply, State};
-handle_info(_Info, State) -> {noreply, State}.
+    {ok, State};
+handle_msg(_Info, State) -> {ok, State}.
 
 
 terminate(normal, _State) -> ok;
@@ -64,9 +59,6 @@ terminate(_Reason, State) ->
     WarehousePid = ets:lookup_element(State#state.pool_name, warehouse_pid, 2),
     ok = hpap_utility:save_messages(WarehousePid, State#state.index),
     ok.
-
-
-code_change(_OldVer, State, _Extra) -> {ok, State}.
 
 
 

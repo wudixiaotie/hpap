@@ -30,7 +30,7 @@ init(Parent, Module, Args) ->
 
 
 init(Parent, Name, Module, Args) ->
-    erlang:register(Name, self()),
+    ok = register_name(Name),
     do_init(Parent, Module, Args).
 
 
@@ -60,6 +60,14 @@ system_replace_state(StateFun, State) ->
 %% Internal functions
 %% ===================================================================
 
+register_name({local, Name}) when is_atom(Name) ->
+    erlang:register(Name, self()),
+    ok;
+register_name({global, Name}) ->
+    global:register_name(Name, self()),
+    ok.
+
+
 do_init(Parent, Module, Args) ->
     Debug = sys:debug_options([]),
 
@@ -79,17 +87,21 @@ loop(Parent, Debug, State, Module, Timeout) ->
         {system, From, Msg} ->
             sys:handle_system_msg(Msg, From, Parent, ?MODULE, Debug, [State, Module, Timeout]);
         Msg ->
-            case catch Module:handle_msg(Msg, State) of
-                {ok, NewState} ->
-                    loop(Parent, Debug, NewState, Module, infinity);
-                {ok, NewState, Timeout} ->
-                    loop(Parent, Debug, NewState, Module, Timeout);
-                {'EXIT', Reason} ->
-                    terminate(Reason, Module, State)
-            end
+            handle_msg(Parent, Debug, State, Module, Timeout, Msg)
     after
         Timeout ->
-            Module:handle_msg(timeout, State)
+            handle_msg(Parent, Debug, State, Module, Timeout, timeout)
+    end.
+
+
+handle_msg(Parent, Debug, State, Module, Timeout, Msg) ->
+    case catch Module:handle_msg(Msg, State) of
+        {ok, NewState} ->
+            loop(Parent, Debug, NewState, Module, infinity);
+        {ok, NewState, Timeout} ->
+            loop(Parent, Debug, NewState, Module, Timeout);
+        {'EXIT', Reason} ->
+            terminate(Reason, Module, State)
     end.
 
 

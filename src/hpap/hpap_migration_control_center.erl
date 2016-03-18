@@ -5,7 +5,7 @@
 % APIs
 -export([start_link/2]).
 
-% gen_server callbacks
+% gen_msg callbacks
 -export([init/1, handle_msg/2, terminate/2]).
 
 -record(state, {pool_name, balance_threshold}).
@@ -24,7 +24,7 @@ start_link(PoolName, BalanceThreshold) ->
 
 
 %% ===================================================================
-%% gen_server callbacks
+%% gen_msg callbacks
 %% ===================================================================
 
 init([PoolName, BalanceThreshold]) ->
