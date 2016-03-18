@@ -4,8 +4,8 @@
 -export([start_link/2, init/3, start_link/3, init/4]).
 
 % system message
--export ([system_continue/3, system_terminate/4, system_get_state/1,
-          system_replace_state/2]).
+-export([system_continue/3, system_terminate/4, system_get_state/1,
+         system_replace_state/2]).
 
 
 

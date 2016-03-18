@@ -21,7 +21,7 @@ create(Task) ->
 
 handle_task(Task) ->
     io:format("~p=============some real task: ~p!~n", [self(), Task]),
-    timer:sleep(10000),
+    timer:sleep(3000),
     ok.
 
 
@@ -34,6 +34,12 @@ send_msg(Pid, Times) when Times > 0 ->
     % pool_test:create(<<"asdf">>),
     send_msg(Pid, Times - 1);
 send_msg(_, 0) ->
+    ok.
+
+call_create(Times) when Times > 0 ->
+    pool_test:create(<<"asdfaSDFAaksjdhfoaiwjef;alskdjflsdf">>),
+    call_create(Times - 1);
+call_create(0) ->
     ok.
 
 workers_info() ->
