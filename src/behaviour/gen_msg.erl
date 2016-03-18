@@ -1,7 +1,7 @@
 -module(gen_msg).
 
 % APIs
--export([start_link/2, init/3, start_link/3, init/4]).
+-export([start_link/2, init/3, start_link/3, init/4, enter_loop/2, enter_loop/3]).
 
 % system message
 -export([system_continue/3, system_terminate/4, system_get_state/1,
@@ -34,13 +34,23 @@ init(Parent, Name, Module, Args) ->
     do_init(Parent, Module, Args).
 
 
+enter_loop(Module, State) ->
+    enter_loop(Module, State, infinity).
+
+
+enter_loop(Module, State, Timeout) ->
+    Parent = get_parent(),
+    Debug = sys:debug_options([]),
+    loop(Parent, Debug, Module, State, Timeout).
+
+
 
 %% ===================================================================
 %% system message
 %% ===================================================================
 
 system_continue(Parent, Debug, [State, Module, Timeout]) ->
-    loop(Parent, Debug, State, Module, Timeout).
+    loop(Parent, Debug, Module, State, Timeout).
 
 
 system_terminate(Reason, _Parent, _Debug, [State, Module, _Timeout]) ->
@@ -82,24 +92,24 @@ do_init(Parent, Module, Args) ->
     loop(Parent, Debug, State, Module, Timeout).
 
 
-loop(Parent, Debug, State, Module, Timeout) ->
+loop(Parent, Debug, Module, State, Timeout) ->
     receive
         {system, From, Msg} ->
             sys:handle_system_msg(Msg, From, Parent, ?MODULE, Debug, [State, Module, Timeout]);
         Msg ->
-            handle_msg(Parent, Debug, State, Module, Timeout, Msg)
+            do_loop(Parent, Debug, Module, State, Timeout, Msg)
     after
         Timeout ->
-            handle_msg(Parent, Debug, State, Module, Timeout, timeout)
+            do_loop(Parent, Debug, Module, State, Timeout, timeout)
     end.
 
 
-handle_msg(Parent, Debug, State, Module, Timeout, Msg) ->
+do_loop(Parent, Debug, Module, State, Timeout, Msg) ->
     case catch Module:handle_msg(Msg, State) of
         {ok, NewState} ->
-            loop(Parent, Debug, NewState, Module, infinity);
+            loop(Parent, Debug, Module, NewState, infinity);
         {ok, NewState, Timeout} ->
-            loop(Parent, Debug, NewState, Module, Timeout);
+            loop(Parent, Debug, Module, NewState, Timeout);
         {'EXIT', Reason} ->
             terminate(Reason, Module, State)
     end.
@@ -108,3 +118,28 @@ handle_msg(Parent, Debug, State, Module, Timeout, Msg) ->
 terminate(Reason, Module, State) ->
     ok = Module:terminate(Reason, State),
     erlang:exit(Reason).
+
+
+get_parent() ->
+    case get('$ancestors') of
+        [Parent | _] when is_pid(Parent)->
+            Parent;
+        [Parent | _] when is_atom(Parent)->
+            name_to_pid(Parent);
+        _ ->
+            exit(process_was_not_started_by_proc_lib)
+    end.
+
+
+name_to_pid(Name) ->
+    case whereis(Name) of
+        undefined ->
+            case global:whereis_name(Name) of
+                undefined ->
+                    exit(could_not_find_registered_name);
+                Pid ->
+                    Pid
+                end;
+        Pid ->
+            Pid
+    end.
