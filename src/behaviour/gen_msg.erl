@@ -35,7 +35,6 @@ init(Parent, Name, Module, Args) ->
 
 
 enter_loop(Module, State) ->
-io:format("=============enter_loop:[~p, ~p]~n", [Module, State]),
     enter_loop(Module, State, infinity).
 
 
