@@ -52,6 +52,11 @@ enter_loop(Module, State, Timeout) ->
 do_init(Parent, Module, Args) ->
     Debug = sys:debug_options([]),
 
+    % update process dictionary, so otp system can get real initial call
+    % not gen_msg:init/1. Also observer will get behaviour about this process
+    % instead of undefined.
+    erlang:put('$initial_call', {Module, init, 1}),
+
     case Module:init(Args) of
         {ok, State} ->
             Timeout = infinity;
