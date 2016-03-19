@@ -5,7 +5,7 @@
 
 % system message
 -export([system_continue/3, system_terminate/4, system_get_state/1,
-         system_replace_state/2]).
+         system_replace_state/2, format_status/2]).
 
 
 
@@ -46,37 +46,8 @@ enter_loop(Module, State, Timeout) ->
 
 
 %% ===================================================================
-%% system message
+%% main loop
 %% ===================================================================
-
-system_continue(Parent, Debug, [State, Module, Timeout]) ->
-    loop(Parent, Debug, Module, State, Timeout).
-
-
-system_terminate(Reason, _Parent, _Debug, [State, Module, _Timeout]) ->
-    terminate(Reason, Module, State).
-
-
-system_get_state([State, _Module, _Timeout]) ->
-    {ok, State, State}.
-
-
-system_replace_state(StateFun, State) ->
-    NewState = StateFun(State),
-    {ok, NewState, NewState}.
-
-
-%% ===================================================================
-%% Internal functions
-%% ===================================================================
-
-register_name({local, Name}) when is_atom(Name) ->
-    erlang:register(Name, self()),
-    ok;
-register_name({global, Name}) ->
-    global:register_name(Name, self()),
-    ok.
-
 
 do_init(Parent, Module, Args) ->
     Debug = sys:debug_options([]),
@@ -95,16 +66,16 @@ do_init(Parent, Module, Args) ->
 loop(Parent, Debug, Module, State, Timeout) ->
     receive
         {system, From, Msg} ->
-            sys:handle_system_msg(Msg, From, Parent, ?MODULE, Debug, [State, Module, Timeout]);
+            sys:handle_system_msg(Msg, From, Parent, ?MODULE, Debug, [Module, State, Timeout]);
         Msg ->
-            do_loop(Parent, Debug, Module, State, Timeout, Msg)
+            do_loop(Parent, Debug, Module, State, Msg)
     after
         Timeout ->
-            do_loop(Parent, Debug, Module, State, Timeout, timeout)
+            do_loop(Parent, Debug, Module, State, timeout)
     end.
 
 
-do_loop(Parent, Debug, Module, State, Timeout, Msg) ->
+do_loop(Parent, Debug, Module, State, Msg) ->
     case catch Module:handle_msg(Msg, State) of
         {ok, NewState} ->
             loop(Parent, Debug, Module, NewState, infinity);
@@ -120,6 +91,60 @@ do_loop(Parent, Debug, Module, State, Timeout, Msg) ->
 terminate(Reason, Module, State) ->
     ok = Module:terminate(Reason, State),
     erlang:exit(Reason).
+
+
+
+%% ===================================================================
+%% system message
+%% ===================================================================
+
+system_continue(Parent, Debug, [Module, State, Timeout]) ->
+    loop(Parent, Debug, Module, State, Timeout).
+
+
+system_terminate(Reason, _Parent, _Debug, [Module, State, _Timeout]) ->
+    terminate(Reason, Module, State).
+
+
+system_get_state([State, _Module, _Timeout]) ->
+    {ok, State, State}.
+
+
+system_replace_state(StateFun, State) ->
+    NewState = StateFun(State),
+    {ok, NewState, NewState}.
+
+
+format_status(_Opt, StatusData) ->
+    [_PDict, SysState, Parent, Debug, [_Module, State, _Timeout]] = StatusData,
+    case erlang:process_info(self(), registered_name) of
+        {registered_name, Name} ->
+            ok;
+        _ ->
+            Name = self()
+    end,
+    Header = gen:format_status_header("Status for generic msg server", Name),
+    Log = sys:get_debug(log, Debug, []),
+    Specfic = [{data, [{"State", State}]}],
+
+    [{header, Header},
+     {data, [{"Status", SysState},
+         {"Parent", Parent},
+         {"Logged events", Log}]} |
+     Specfic].
+
+
+
+%% ===================================================================
+%% Internal functions
+%% ===================================================================
+
+register_name({local, Name}) when is_atom(Name) ->
+    erlang:register(Name, self()),
+    ok;
+register_name({global, Name}) ->
+    global:register_name(Name, self()),
+    ok.
 
 
 get_parent() ->
