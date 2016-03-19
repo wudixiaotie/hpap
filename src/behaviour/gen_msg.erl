@@ -35,6 +35,7 @@ init(Parent, Name, Module, Args) ->
 
 
 enter_loop(Module, State) ->
+io:format("=============enter_loop:[~p, ~p]~n", [Module, State]),
     enter_loop(Module, State, infinity).
 
 
@@ -89,7 +90,7 @@ do_init(Parent, Module, Args) ->
     end,
 
     ok = proc_lib:init_ack(Parent, {ok, self()}),
-    loop(Parent, Debug, State, Module, Timeout).
+    loop(Parent, Debug, Module, State, Timeout).
 
 
 loop(Parent, Debug, Module, State, Timeout) ->
@@ -108,10 +109,12 @@ do_loop(Parent, Debug, Module, State, Timeout, Msg) ->
     case catch Module:handle_msg(Msg, State) of
         {ok, NewState} ->
             loop(Parent, Debug, Module, NewState, infinity);
-        {ok, NewState, Timeout} ->
-            loop(Parent, Debug, Module, NewState, Timeout);
+        {ok, NewState, NewTimeout} ->
+            loop(Parent, Debug, Module, NewState, NewTimeout);
         {'EXIT', Reason} ->
-            terminate(Reason, Module, State)
+            terminate(Reason, Module, State);
+        Other ->
+            terminate({bad_return_value, Other}, Module, State)
     end.
 
 
