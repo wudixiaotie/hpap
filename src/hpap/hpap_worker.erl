@@ -18,7 +18,7 @@
 
 start_link(PoolName, BalanceThreshold, Index) ->
     WorkerName = hpap_utility:worker_name(PoolName, Index),
-    gen_msg:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold, Index]).
+    gen_msg:start_link({local, WorkerName}, ?MODULE, [PoolName, BalanceThreshold, Index], []).
 
 
 

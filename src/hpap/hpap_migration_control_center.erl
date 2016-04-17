@@ -19,7 +19,7 @@
 %% ===================================================================
 
 start_link(PoolName, BalanceThreshold) ->
-    gen_msg:start_link(?MODULE, [PoolName, BalanceThreshold]).
+    gen_msg:start_link(?MODULE, [PoolName, BalanceThreshold], []).
 
 
 
